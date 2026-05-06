@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Web Weaver: Typist's Prey</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: #111115;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: 100dvh; 
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #game-container {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+            background: radial-gradient(circle at center, #22222a 0%, #0a0a0d 100%);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: max(20px, env(safe-area-inset-top));
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            pointer-events: none;
+            align-items: flex-start;
+        }
+
+        #current-input-wrapper {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+        }
+
+        #current-input {
+            display: inline-block;
+            font-size: clamp(20px, 5vw, 28px);
+            letter-spacing: 4px;
+            color: #e0d8c8;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 8px 24px;
+            border-radius: 20px;
+            border: 1px solid #444;
+            min-height: 48px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            transition: all 0.2s;
+            text-align: center;
+            min-width: 80px;
+        }
+
+        #current-input.error {
+            color: #ff4444;
+            border-color: #ff4444;
+            animation: shake 0.3s;
+        }
+
+        #score-display {
+            font-size: clamp(14px, 4vw, 18px);
+            color: #888;
+            white-space: nowrap;
+            margin-left: 10px;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        #keyboard-container {
+            flex-shrink: 0;
+            background: linear-gradient(to bottom, #2c2b2a, #1a1a1a);
+            border-top: 4px solid #4a4540;
+            padding: 15px 5px max(15px, env(safe-area-inset-bottom));
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 10px 20px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+
+        .keyboard-row {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 10px;
+            width: 100%;
+            max-width: 800px;
+        }
+        
+        .keyboard-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .key {
+            width: 50px;
+            height: 50px;
+            margin: 0 6px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 50% 10%, #e8e3d8, #d4ccb8);
+            border: none;
+            color: #222;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            font-size: 20px;
+            position: relative;
+            cursor: pointer;
+            box-shadow: 
+                0 6px 0 #8b8070,
+                0 8px 5px rgba(0,0,0,0.6),
+                inset 0 -2px 5px rgba(0,0,0,0.2),
+                inset 0 2px 2px rgba(255,255,255,0.8);
+            transition: transform 0.05s ease, box-shadow 0.05s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .key::before {
+            content: '';
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            right: 4px;
+            bottom: 4px;
+            border-radius: 50%;
+            border: 1px solid rgba(0,0,0,0.1);
+            background: radial-gradient(circle at center, transparent 40%, rgba(0,0,0,0.05) 100%);
+            pointer-events: none;
+        }
+
+        .key:active, .key.active {
+            transform: translateY(6px);
+            box-shadow: 
+                0 0px 0 #8b8070,
+                0 2px 2px rgba(0,0,0,0.6),
+                inset 0 -1px 3px rgba(0,0,0,0.2),
+                inset 0 2px 2px rgba(255,255,255,0.8);
+            background: radial-gradient(circle at 50% 10%, #d4ccb8, #bfb7a2);
+        }
+
+        .key-del {
+            width: 80px;
+            border-radius: 25px;
+            background: radial-gradient(circle at 50% 10%, #c45b5b, #a34242);
+            color: #fff;
+            box-shadow: 
+                0 6px 0 #6d2828,
+                0 8px 5px rgba(0,0,0,0.6),
+                inset 0 -2px 5px rgba(0,0,0,0.2),
+                inset 0 2px 2px rgba(255,150,150,0.6);
+        }
+        .key-del::before { display: none; }
+
+        .key-del:active, .key-del.active {
+            box-shadow: 
+                0 0px 0 #6d2828,
+                0 2px 2px rgba(0,0,0,0.6);
+            background: radial-gradient(circle at 50% 10%, #a34242, #8b3434);
+        }
+
+        @media (max-width: 768px) {
+            .key { 
+                width: 8.5vw; 
+                height: 8.5vw; 
+                max-width: 45px;
+                max-height: 45px;
+                margin: 0 0.8vw; 
+                font-size: clamp(14px, 4vw, 18px); 
+                box-shadow: 
+                    0 4px 0 #8b8070, 
+                    0 5px 3px rgba(0,0,0,0.5),
+                    inset 0 -1px 3px rgba(0,0,0,0.2),
+                    inset 0 1px 1px rgba(255,255,255,0.8);
+            }
+            .key::before { top: 2px; left: 2px; right: 2px; bottom: 2px; }
+            .key:active, .key.active { 
+                transform: translateY(4px); 
+                box-shadow: 
+                    0 0px 0 #8b8070, 
+                    0 1px 2px rgba(0,0,0,0.5),
+                    inset 0 -1px 2px rgba(0,0,0,0.2),
+                    inset 0 1px 1px rgba(255,255,255,0.8);
+            }
+            .key-del { 
+                width: 14vw; 
+                max-width: 70px;
+                font-size: clamp(12px, 3.5vw, 14px); 
+                border-radius: 20px; 
+                box-shadow: 0 4px 0 #6d2828, 0 5px 3px rgba(0,0,0,0.5);
+            }
+            .key-del:active, .key-del.active {
+                box-shadow: 0 0px 0 #6d2828, 0 1px 2px rgba(0,0,0,0.6);
+            }
+            .keyboard-row { margin-bottom: 8px; }
+            #keyboard-container { padding: 10px 2px max(10px, env(safe-area-inset-bottom)); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-layer">
+            <div style="width: 60px;"></div> 
+            <div id="current-input-wrapper">
+                <div id="current-input"></div>
+            </div>
+            <div id="score-display">Score: <br><span id="score-val" style="font-weight:bold; font-size: 1.2em;">0</span></div>
+        </div>
+    </div>
+
+    <div id="keyboard-container">
+        <!-- 键盘通过JS动态生成 -->
+    </div>
+
+    <script>
+        class Point {
+            constructor(x, y, pinned = false) {
+                this.x = x; this.y = y;
+                this.oldX = x; this.oldY = y;
+                this.pinned = pinned;
+                this.isNode = false;     
+                this.isHanging = false;  
+                this.letter = '';        
+                this.neighbors = [];     
+                this.hangingPoint = null;
+            }
+        }
+
+        class Stick {
+            constructor(p0, p1, stiffness = 0.5) {
+                this.p0 = p0; this.p1 = p1;
+                this.length = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+                this.stiffness = stiffness;
+            }
+
+            update() {
+                const dx = this.p1.x - this.p0.x;
+                const dy = this.p1.y - this.p0.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist === 0) return;
+                const diff = this.length - dist;
+                const percent = (diff / dist) * this.stiffness * 0.5;
+                const offsetX = dx * percent;
+                const offsetY = dy * percent;
+
+                if (!this.p0.pinned) { this.p0.x -= offsetX; this.p0.y -= offsetY; }
+                if (!this.p1.pinned) { this.p1.x += offsetX; this.p1.y += offsetY; }
+            }
+        }
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiInput = document.getElementById('current-input');
+        const uiScore = document.getElementById('score-val');
+        const gameContainer = document.getElementById('game-container');
+
+        let width = 300, height = 300;
+        let points = [], sticks = [], webNodes = []; 
+        let typingSequence = "", matchingPaths = [], score = 0;
+
+        let spider = { currentNode: null, targetNode: null, path: [], progress: 0, speed: 0.05, x: 0, y: 0 };
+        let bug = { active: false, node: null, state: 'idle', x: 0, y: 0, timer: 0, maxStayTime: 400, animOffset: 0 };
+
+        const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        const FRICTION = 0.98;
+        const GRAVITY = 0.2; 
+        let textScale = 1;
+
+        // 核心修复1：确保 Canvas 分辨率严格匹配其实际 CSS 尺寸，防止任何拉伸和压扁
+        function resize() {
+            const rect = gameContainer.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) return; // 尚未渲染完成
+
+            width = rect.width;
+            height = rect.height;
+            const dpr = window.devicePixelRatio || 1;
+            
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            ctx.scale(dpr, dpr);
+            
+            textScale = Math.max(0.8, Math.min(1.2, width / 400));
+        }
+
+        // 监听容器大小变化而不是 window，这样可以完美避开键盘弹出等布局跳动带来的压扁问题
+        const resizeObserver = new ResizeObserver(() => {
+            const oldWidth = width;
+            const oldHeight = height;
+            resize();
+            // 只有当尺寸发生较明显变化时，才重新生成网，防止轻微抖动重置进度
+            if (Math.abs(oldWidth - width) > 10 || Math.abs(oldHeight - height) > 50) {
+                if(width > 0 && height > 0) generateWeb();
+            }
+        });
+
+        function generateWeb() {
+            points = []; sticks = []; webNodes = [];
+            spider.path = []; bug.active = false; clearInput();
+
+            const centerX = width / 2;
+            const centerY = height * 0.4; // 稍微偏上
+            
+            const isMobile = width < 600;
+            const rings = isMobile ? 3 : 4; 
+            const spokes = isMobile ? 8 : 10;
+            
+            // 核心修复2：基于屏幕最窄边计算网格的最大半径，去掉强行把节点挤在屏幕内的做法，保持完美圆形
+            const safePadding = 40;
+            const maxRadius = Math.min((width - safePadding * 2) / 2, (height - safePadding * 2) / 2); 
+            const radiusStep = maxRadius / rings;
+
+            const centerNode = new Point(centerX, centerY, true); 
+            centerNode.isNode = true;
+            points.push(centerNode); webNodes.push(centerNode);
+
+            let ringNodes = [[centerNode]];
+
+            for (let r = 1; r <= rings; r++) {
+                let currentRing = [];
+                const radius = r * radiusStep;
+                
+                for (let s = 0; s < spokes; s++) {
+                    const angle = (Math.PI * 2 * s) / spokes + (r % 2) * 0.2; 
+                    // 降低噪波比例，确保网状结构更圆滑，不会乱七八糟
+                    const noise = (Math.random() - 0.5) * (radiusStep * 0.3); 
+                    
+                    const px = centerX + Math.cos(angle) * (radius + noise);
+                    const py = centerY + Math.sin(angle) * (radius + noise);
+
+                    const isPinned = (r === rings); 
+                    const p = new Point(px, py, isPinned);
+                    p.isNode = true;
+                    points.push(p); webNodes.push(p); currentRing.push(p);
+                }
+                ringNodes.push(currentRing);
+            }
+
+            for (let r = 1; r <= rings; r++) {
+                const currentRing = ringNodes[r];
+                const prevRing = ringNodes[r-1];
+                for (let s = 0; s < spokes; s++) {
+                    const p = currentRing[s];
+                    const nextP = currentRing[(s + 1) % spokes];
+                    addLink(p, nextP, 0.4);
+                    const innerP = r === 1 ? prevRing[0] : prevRing[s];
+                    addLink(p, innerP, 0.6);
+                }
+            }
+
+            webNodes.forEach(node => {
+                if(node === centerNode) return;
+                node.letter = LETTERS[Math.floor(Math.random() * LETTERS.length)];
+                
+                const hangLen = (20 + Math.random() * 15) * textScale;
+                const hp = new Point(node.x, node.y + hangLen, false);
+                hp.isHanging = true;
+                hp.letter = node.letter;
+                
+                points.push(hp);
+                sticks.push(new Stick(node, hp, 0.8)); 
+                node.hangingPoint = hp;
+            });
+
+            spider.currentNode = centerNode;
+            spider.x = centerNode.x; spider.y = centerNode.y;
+            spider.targetNode = null;
+        }
+
+        function addLink(p1, p2, stiffness) {
+            sticks.push(new Stick(p1, p2, stiffness));
+            p1.neighbors.push(p2); p2.neighbors.push(p1);
+        }
+
+        function updatePhysics() {
+            for (let p of points) {
+                if (!p.pinned) {
+                    const vx = (p.x - p.oldX) * FRICTION;
+                    const vy = (p.y - p.oldY) * FRICTION;
+                    p.oldX = p.x; p.oldY = p.y;
+                    p.x += vx; p.y += vy;
+                    
+                    if (p.isHanging) p.y += GRAVITY;
+                    else p.y += GRAVITY * 0.1; 
+                }
+            }
+            for (let i = 0; i < 4; i++) {
+                for (let s of sticks) s.update();
+            }
+        }
+
+        function updateLogic() {
+            if (!bug.active && Math.random() < 0.01) spawnBug();
+
+            if (bug.active) {
+                bug.animOffset += 0.2;
+                if (bug.state === 'fly_in') {
+                    const dx = bug.node.x - bug.x; const dy = bug.node.y - bug.y;
+                    bug.x += dx * 0.05; bug.y += dy * 0.05 + Math.sin(bug.animOffset)*2; 
+                    if (Math.hypot(dx, dy) < 5) { bug.state = 'landed'; bug.timer = bug.maxStayTime; }
+                } else if (bug.state === 'landed') {
+                    bug.x = bug.node.x; bug.y = bug.node.y; bug.timer--;
+                    if (bug.timer <= 0) { bug.state = 'fly_out'; clearInput(); }
+                } else if (bug.state === 'fly_out') {
+                    bug.y -= 3; bug.x += Math.sin(bug.animOffset) * 4;
+                    if (bug.y < -50) bug.active = false;
+                }
+            }
+
+            if (spider.path.length > 0) {
+                const targetPoint = spider.path[0];
+                spider.progress += spider.speed;
+                spider.x = spider.currentNode.x + (targetPoint.x - spider.currentNode.x) * spider.progress;
+                spider.y = spider.currentNode.y + (targetPoint.y - spider.currentNode.y) * spider.progress;
+
+                if (spider.progress >= 1) {
+                    spider.currentNode = targetPoint; spider.path.shift(); spider.progress = 0;
+                    if (spider.path.length === 0 && bug.active && bug.node === spider.currentNode && bug.state === 'landed') {
+                        score += 100; uiScore.innerText = score; bug.active = false; flashScreen();
+                    }
+                }
+            } else {
+                if(spider.currentNode) { spider.x = spider.currentNode.x; spider.y = spider.currentNode.y; }
+            }
+        }
+
+        function spawnBug() {
+            let candidates = webNodes.filter(n => n.letter !== '' && n !== spider.currentNode);
+            if(candidates.length === 0) return;
+            bug.node = candidates[Math.floor(Math.random() * candidates.length)];
+            bug.x = Math.random() < 0.5 ? -50 : width + 50; bug.y = -50;
+            bug.state = 'fly_in'; bug.active = true;
+        }
+
+        let flashOpacity = 0;
+        function flashScreen() { flashOpacity = 0.5; }
+
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+
+            ctx.lineWidth = 1;
+            for (let s of sticks) {
+                ctx.beginPath(); ctx.moveTo(s.p0.x, s.p0.y);
+                if (s.p1.isHanging) {
+                    ctx.strokeStyle = 'rgba(200, 200, 200, 0.4)'; ctx.lineTo(s.p1.x, s.p1.y);
+                } else {
+                    let isHighlighted = false;
+                    for (let path of matchingPaths) {
+                        for(let i=0; i<path.length-1; i++){
+                            if ((path[i] === s.p0 && path[i+1] === s.p1) || (path[i] === s.p1 && path[i+1] === s.p0)) {
+                                isHighlighted = true; break;
+                            }
+                        }
+                        if(isHighlighted) break;
+                    }
+                    if (isHighlighted) { ctx.strokeStyle = 'rgba(255, 200, 50, 0.9)'; ctx.lineWidth = 3; } 
+                    else { ctx.strokeStyle = 'rgba(150, 160, 180, 0.3)'; ctx.lineWidth = 1; }
+
+                    const cx = (s.p0.x + s.p1.x) / 2;
+                    const cy = (s.p0.y + s.p1.y) / 2 + 10 * textScale; 
+                    ctx.quadraticCurveTo(cx, cy, s.p1.x, s.p1.y);
+                }
+                ctx.stroke();
+            }
+
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = `bold ${Math.floor(16 * textScale)}px "Courier New", monospace`;
+
+            for (let p of points) {
+                if (p.isHanging) {
+                    const parent = webNodes.find(n => n.hangingPoint === p);
+                    let isStartNode = matchingPaths.some(path => path[0] === parent);
+                    let isTargetConfirmed = (matchingPaths.length === 1 && isStartNode);
+                    const nodeRadius = 12 * textScale;
+
+                    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(p.x, p.y, nodeRadius, 0, Math.PI * 2); ctx.fill();
+
+                    if (isTargetConfirmed) {
+                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * textScale; ctx.fillStyle = '#fff';
+                        ctx.shadowColor = '#fff'; ctx.shadowBlur = 15;
+                    } else if (isStartNode) {
+                        ctx.strokeStyle = '#ffc832'; ctx.lineWidth = 2 * textScale; ctx.fillStyle = '#ffc832';
+                        ctx.shadowColor = '#ffc832'; ctx.shadowBlur = 8;
+                    } else {
+                        ctx.strokeStyle = '#555'; ctx.lineWidth = 1; ctx.fillStyle = '#aaa'; ctx.shadowBlur = 0;
+                    }
+
+                    ctx.stroke(); ctx.fillText(p.letter, p.x, p.y + 1); ctx.shadowBlur = 0; 
+                }
+            }
+
+            if (bug.active) {
+                ctx.save(); ctx.translate(bug.x, bug.y);
+                ctx.fillStyle = '#8cf064'; ctx.shadowColor = '#8cf064'; ctx.shadowBlur = 10;
+                ctx.beginPath(); ctx.arc(0, 0, 4 * textScale, 0, Math.PI * 2); ctx.fill();
+                ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                const wingRot = Math.sin(bug.animOffset * 2) * 0.5; const ws = textScale;
+                ctx.rotate(wingRot); ctx.beginPath(); ctx.ellipse(-5*ws, -3*ws, 6*ws, 2*ws, -Math.PI/6, 0, Math.PI*2); ctx.fill();
+                ctx.rotate(-wingRot * 2); ctx.beginPath(); ctx.ellipse(5*ws, -3*ws, 6*ws, 2*ws, Math.PI/6, 0, Math.PI*2); ctx.fill();
+                ctx.restore();
+            }
+
+            drawSpider(spider.x, spider.y);
+
+            if (flashOpacity > 0) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${flashOpacity})`; ctx.fillRect(0, 0, width, height);
+                flashOpacity -= 0.05;
+            }
+        }
+
+        function drawSpider(sx, sy) {
+            ctx.save(); ctx.translate(sx, sy); const ss = textScale; 
+            ctx.fillStyle = '#111'; ctx.strokeStyle = '#444'; ctx.lineWidth = 1.5 * ss;
+            ctx.beginPath(); ctx.arc(0, 2*ss, 6*ss, 0, Math.PI * 2); ctx.arc(0, -4*ss, 4*ss, 0, Math.PI * 2); 
+            ctx.fill(); ctx.stroke();
+
+            const t = spider.path.length > 0 ? Date.now() * 0.02 : 0;
+            ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5 * ss;
+            const legAngles = [-0.8, -0.3, 0.3, 0.8]; 
+            for (let i = 0; i < 4; i++) {
+                ctx.beginPath(); ctx.moveTo(-2*ss, 0);
+                let lx = (-12 - Math.cos(t + i) * 3) * ss; let ly = (Math.sin(legAngles[i]) * 15 + Math.sin(t + i) * 3) * ss;
+                ctx.quadraticCurveTo(-10*ss, ly-5*ss, lx, ly); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(2*ss, 0);
+                let rx = (12 + Math.cos(t + i + Math.PI) * 3) * ss; let ry = (Math.sin(legAngles[i]) * 15 + Math.sin(t + i + Math.PI) * 3) * ss;
+                ctx.quadraticCurveTo(10*ss, ry-5*ss, rx, ry); ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function handleInput(char) {
+            if (char === 'DEL' || char === 'BACKSPACE') typingSequence = typingSequence.slice(0, -1);
+            else if (LETTERS.includes(char)) typingSequence += char;
+            else return;
+
+            uiInput.innerText = typingSequence; uiInput.classList.remove('error');
+            if (typingSequence === "") { matchingPaths = []; return; }
+            matchingPaths = findMatchingPaths(typingSequence);
+
+            if (matchingPaths.length === 0) {
+                uiInput.classList.add('error');
+                setTimeout(() => {
+                    typingSequence = typingSequence.slice(0, -1); uiInput.innerText = typingSequence;
+                    matchingPaths = findMatchingPaths(typingSequence);
+                }, 300);
+            } else if (matchingPaths.length === 1) {
+                triggerSpiderAttack(matchingPaths[0][0]); clearInput();
+            }
+        }
+
+        function clearInput() { typingSequence = ""; uiInput.innerText = ""; matchingPaths = []; }
+
+        function findMatchingPaths(seq) {
+            let paths = [];
+            for (let node of webNodes) {
+                if (node.letter === seq[0]) paths.push(...explore(node, seq, 1, [node]));
+            }
+            return paths;
+        }
+
+        function explore(node, seq, index, currentPath) {
+            if (index === seq.length) return [currentPath];
+            let paths = [];
+            for (let neighbor of node.neighbors) {
+                if (neighbor.letter === seq[index] && !currentPath.includes(neighbor)) {
+                    paths.push(...explore(neighbor, seq, index + 1, [...currentPath, neighbor]));
+                }
+            }
+            return paths;
+        }
+
+        function triggerSpiderAttack(target) {
+            if (spider.currentNode === target) return; 
+            let queue = [[spider.currentNode]]; let visited = new Set(); visited.add(spider.currentNode);
+            while (queue.length > 0) {
+                let path = queue.shift(); let node = path[path.length - 1];
+                if (node === target) { path.shift(); spider.path = path; spider.progress = 0; return; }
+                for (let neighbor of node.neighbors) {
+                    if (!visited.has(neighbor)) { visited.add(neighbor); queue.push([...path, neighbor]); }
+                }
+            }
+        }
+
+        function buildKeyboard() {
+            const kb = document.getElementById('keyboard-container');
+            const rows = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
+            rows.forEach((rowChars, index) => {
+                const rowDiv = document.createElement('div'); rowDiv.className = 'keyboard-row';
+                for (let char of rowChars) {
+                    const btn = document.createElement('button'); btn.className = 'key'; btn.innerText = char; btn.dataset.key = char;
+                    const press = (e) => {
+                        if(e.type === 'touchstart' || (e.type === 'mousedown' && e.button === 0)) {
+                            e.preventDefault(); btn.classList.add('active'); handleInput(char);
+                        }
+                    };
+                    const release = (e) => { e.preventDefault(); btn.classList.remove('active'); };
+                    btn.addEventListener('mousedown', press); btn.addEventListener('touchstart', press, {passive: false});
+                    document.addEventListener('mouseup', release); document.addEventListener('touchend', release);
+                    rowDiv.appendChild(btn);
+                }
+                if (index === 2) {
+                    const delBtn = document.createElement('button'); delBtn.className = 'key key-del'; delBtn.innerText = 'DEL'; delBtn.dataset.key = 'BACKSPACE';
+                    const pressDel = (e) => {
+                        if(e.type === 'touchstart' || (e.type === 'mousedown' && e.button === 0)) {
+                            e.preventDefault(); delBtn.classList.add('active'); handleInput('DEL');
+                        }
+                    };
+                    const releaseDel = (e) => { e.preventDefault(); delBtn.classList.remove('active'); };
+                    delBtn.addEventListener('mousedown', pressDel); delBtn.addEventListener('touchstart', pressDel, {passive: false});
+                    document.addEventListener('mouseup', releaseDel); document.addEventListener('touchend', releaseDel);
+                    rowDiv.appendChild(delBtn);
+                }
+                kb.appendChild(rowDiv);
+            });
+        }
+
+        window.addEventListener('keydown', (e) => {
+            const key = e.key.toUpperCase();
+            if (LETTERS.includes(key) || key === 'BACKSPACE') {
+                handleInput(key);
+                const btn = document.querySelector(`.key[data-key="${key}"]`);
+                if (btn) btn.classList.add('active');
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            const key = e.key.toUpperCase();
+            const btn = document.querySelector(`.key[data-key="${key}"]`);
+            if (btn) btn.classList.remove('active');
+        });
+
+        function loop() {
+            updatePhysics(); updateLogic(); draw();
+            requestAnimationFrame(loop);
+        }
+
+        // 核心修复3：明确初始化顺序。先建立 DOM 树结构 -> 让 ResizeObserver 测量稳定后的容器大小 -> 然后游戏启动
+        buildKeyboard();
+        resizeObserver.observe(gameContainer);
+        requestAnimationFrame(loop);
+
+    </script>
+</body>
+</html>
